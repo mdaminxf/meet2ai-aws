@@ -3,7 +3,7 @@ export default function AvatarLayer() {
     <div className="background-layer">
       <video
         className="background-video"
-        src="/media/ww.mp4"
+        src="/publicww.mp4"
         autoPlay
         muted
         loop
