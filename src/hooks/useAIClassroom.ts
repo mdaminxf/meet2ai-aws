@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 
-const APPSYNC_URL = (import.meta as any).env.VITE_APPSYNC_GRAPHQL_URL || "https://uuli22skirgnva2tbufvnmdggy.appsync-api.eu-north-1.amazonaws.com/graphql";
-const API_KEY = (import.meta as any).env.VITE_APPSYNC_API_KEY || "da2-6mjia2dmyzczd6vreueu6fgtq";
+// API Gateway REST endpoint - NO API KEY NEEDED (Lambda protects Gemini key)
+const API_ENDPOINT = (import.meta as any).env.VITE_API_ENDPOINT || "https://YOUR_API_ID.execute-api.eu-north-1.amazonaws.com/prod/generate";
 
 export interface AIStep {
   spokenText: string;
@@ -29,54 +29,29 @@ export const useAIClassroom = () => {
     setLoading(true);
     setError(null);
 
-    const query = `
-      mutation GenerateAI($prompt: String!, $image: String) {
-        generateAIResponse(prompt: $prompt, image: $image) {
-          chatAction
-          mode
-          language
-          clearBoard
-          audioUrl
-          fallback
-          steps {
-            spokenText
-            whiteboardText
-            highlightText
-            permanentHighlight
-            drawings
-          }
-        }
-      }
-    `;
-
     try {
-      const response = await fetch(APPSYNC_URL, {
+      const response = await fetch(API_ENDPOINT, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': API_KEY,
         },
-        body: JSON.stringify({
-          query,
-          variables: { prompt, image },
-        }),
+        body: JSON.stringify({ prompt, image }),
       });
 
-      const result = await response.json();
-      
-      if (result.errors) {
-        throw new Error(result.errors[0].message);
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
       }
 
-      const aiData = result.data.generateAIResponse;
+      const aiData = await response.json();
 
       if (aiData.fallback) {
-        console.warn("Enterprise AI Busy - Using Local Fallback Architecture");
+        console.warn("AI service busy - using fallback mode");
       }
 
       return aiData;
     } catch (err: any) {
       setError(err.message);
+      console.error('AI request failed:', err);
       return null;
     } finally {
       setLoading(false);

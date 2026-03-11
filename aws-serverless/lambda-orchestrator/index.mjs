@@ -88,11 +88,19 @@ async function withRetry(fn, maxRetries = 3) {
 }
 
 export const handler = async (event) => {
-  const { fieldName, arguments: args } = event.info;
-  const { prompt, image } = args;
+  // Handle API Gateway REST API format
+  const body = JSON.parse(event.body || '{}');
+  const { prompt, image } = body;
 
-  if (fieldName !== "generateAIResponse" && fieldName !== "getAIResponse") {
-    throw new Error(`Unknown field: ${fieldName}`);
+  if (!prompt) {
+    return {
+      statusCode: 400,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ error: 'Prompt is required' })
+    };
   }
 
   // 1. Hash Prompt for Caching
@@ -107,7 +115,15 @@ export const handler = async (event) => {
 
     if (cacheResult.Item && cacheResult.Item.ttl > Math.floor(Date.now() / 1000)) {
       console.log("Cache Hit!");
-      return cacheResult.Item.response;
+      // Return cached response in API Gateway format
+      return {
+        statusCode: 200,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(cacheResult.Item.response)
+      };
     }
   } catch (err) {
     console.error("Cache Check Error:", err);
@@ -152,12 +168,20 @@ export const handler = async (event) => {
     });
   } catch (err) {
     console.error("Gemini Failure:", err);
-    return {
+    const fallbackResponse = {
       chatAction: "The AI is currently busy. Switching to local fallback mode.",
       mode: "whiteboard",
       clearBoard: false,
       steps: [],
       fallback: true
+    };
+    return {
+      statusCode: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(fallbackResponse)
     };
   }
 
@@ -209,7 +233,7 @@ export const handler = async (event) => {
     console.warn("Polly/S3 Error (falling back to browser TTS):", err);
   }
 
-  // 5. Save to Cache with 7-day TTL
+  // 5. Save to Cache with 7-day TTL (save the response object, not the API Gateway wrapper)
   try {
     await docClient.send(new PutCommand({
       TableName: TABLE_NAME,
@@ -223,7 +247,15 @@ export const handler = async (event) => {
     console.error("Cache Save Error:", err);
   }
 
-  return aiResponse;
+  // Return API Gateway format
+  return {
+    statusCode: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(aiResponse)
+  };
 };
 
 // Helper to parse the structured response from Gemini text
