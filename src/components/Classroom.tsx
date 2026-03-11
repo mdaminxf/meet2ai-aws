@@ -264,9 +264,12 @@ export default function Classroom({ isActive, onEndSession }: ClassroomProps) {
   useEffect(() => {
     if (!isActive) return;
 
-    // Fetch history from backend
+    // Fetch history from backend (optional - only works in local dev)
     fetch('/api/history')
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error('History API not available');
+        return res.json();
+      })
       .then(data => {
         setSessionHistory(data.map((item: any) => ({
           timestamp: item.timestamp,
@@ -274,7 +277,10 @@ export default function Classroom({ isActive, onEndSession }: ClassroomProps) {
           response: item.response
         })));
       })
-      .catch(err => console.error("Error fetching history:", err));
+      .catch(err => {
+        // Silently fail - history API is optional
+        console.log("History API not available (expected in production)");
+      });
 
     // Initialize Speech Recognition
     const initSpeechRecognition = () => {
@@ -820,8 +826,26 @@ export default function Classroom({ isActive, onEndSession }: ClassroomProps) {
           return;
         }
       } catch (err) {
-        console.error("AWS Enterprise Error, falling back to local Gemini:", err);
+        console.error("AWS API Error:", err);
+        // In production, show error instead of falling back to local Gemini
+        setSteps([{
+          spokenText: "Sorry, the AI service is temporarily unavailable. Please try again in a moment.",
+          whiteboardText: "Service temporarily unavailable."
+        }]);
+        setIsProcessing(false);
+        return;
       }
+    }
+
+    // Local Gemini fallback (only works in development with GEMINI_API_KEY)
+    if (!process.env.GEMINI_API_KEY) {
+      console.error("No Gemini API key available");
+      setSteps([{
+        spokenText: "AI service configuration error. Please contact support.",
+        whiteboardText: "Configuration error."
+      }]);
+      setIsProcessing(false);
+      return;
     }
 
     try {
